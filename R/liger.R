@@ -696,6 +696,10 @@ optimizeALS.list  <- function(
   if (!all(sapply(X = object, FUN = is.matrix))) {
     stop("All values in 'object' must be a matrix")
   }
+  
+  #test
+  print("hello wttt?")
+  
   E <- object
   N <- length(x = E)
   ns <- sapply(X = E, FUN = nrow)
@@ -703,15 +707,16 @@ optimizeALS.list  <- function(
     stop('Select k lower than the number of cells in smallest dataset: ', min(ns))
   }
   tmp <- gc()
-  g <- ncol(x = E[[1]])
-  if (k >= g) {
+  g <- sapply(X = E, FUN = ncol)
+  gm <- min(g)
+  if (k >= gm) {
     stop('Select k lower than the number of variable genes: ', g)
   }
-  W_m <- matrix(data = 0, nrow = k, ncol = g)
+  W_m <- matrix(data = 0, nrow = k, ncol = gm)
   V_m <- lapply(
     X = 1:N,
     FUN = function(i) {
-      return(matrix(data = 0, nrow = k, ncol = g))
+      return(matrix(data = 0, nrow = k, ncol = g[i]))
     }
   )
   H_m <- lapply(
@@ -726,11 +731,25 @@ optimizeALS.list  <- function(
   for (i in 1:nrep) {
     set.seed(seed = rand.seed + i - 1)
     start_time <- Sys.time()
-    W <- matrix(
-      data = abs(x = runif(n = g * k, min = 0, max = 2)),
-      nrow = k,
-      ncol = g
+#    W <- matrix(
+#      data = abs(x = runif(n = gm * k, min = 0, max = 2)),
+#      nrow = k,
+#      ncol = gm
+#    )
+    
+    W <- lapply(
+      X = 1:N,
+      FUN = function(i) {
+        return(matrix(
+          data = cbind(abs(x = runif(n = g * k, min = 0, max = 2)), 
+                       matrix(data = 0, nrow = k, ncol = g[i]-gm)),
+          nrow = k,
+          ncol = g
+        ))
+      }
     )
+    
+    
     V <- lapply(
       X = 1:N,
       FUN = function(i) {
@@ -768,7 +787,7 @@ optimizeALS.list  <- function(
     obj0 <- sum(sapply(
       X = 1:N,
       FUN = function(i) {
-        return(norm(x = E[[i]] - H[[i]] %*% (W + V[[i]]), type = "F") ^ 2)
+        return(norm(x = E[[i]] - H[[i]] %*% (W[[i]] + V[[i]]), type = "F") ^ 2)
       }
     )) +
       sum(sapply(
@@ -783,7 +802,7 @@ optimizeALS.list  <- function(
         X = 1:N,
         FUN = function(i) {
           return(t(x = solveNNLS(
-            C = rbind(t(x = W) + t(x = V[[i]]), sqrt_lambda * t(x = V[[i]])),
+            C = rbind(t(x = W[[i]]) + t(x = V[[i]]), sqrt_lambda * t(x = V[[i]])),
             B = rbind(t(x = E[[i]]), matrix(data = 0, nrow = g, ncol = ns[i]))
           )))
         }
@@ -794,7 +813,7 @@ optimizeALS.list  <- function(
         FUN = function(i) {
           return(solveNNLS(
             C = rbind(H[[i]], sqrt_lambda * H[[i]]),
-            B = rbind(E[[i]] - H[[i]] %*% W, matrix(data = 0, nrow = ns[[i]], ncol = g))
+            B = rbind(E[[i]] - H[[i]] %*% W[[i]], matrix(data = 0, nrow = ns[[i]], ncol = g))
           ))
         }
       )
@@ -812,7 +831,7 @@ optimizeALS.list  <- function(
       obj <- sum(sapply(
         X = 1:N,
         FUN = function(i) {
-          return(norm(x = E[[i]] - H[[i]] %*% (W + V[[i]]), type = "F") ^ 2)
+          return(norm(x = E[[i]] - H[[i]] %*% (W[[i]] + V[[i]]), type = "F") ^ 2)
         }
       )) +
         sum(sapply(
