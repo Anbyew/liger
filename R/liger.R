@@ -737,6 +737,12 @@ optimizeALS.list  <- function(
     start_time <- Sys.time()
     
     # Initialization with uniform random numbers
+    W_comm <- matrix(
+      data = abs(x = runif(n = gm * k, min = 0, max = 2)),
+      nrow = k,
+      ncol = gm
+    )
+    
     W <- lapply(
       X = 1:N,
       FUN = function(i) {
@@ -783,6 +789,7 @@ optimizeALS.list  <- function(
     }
     
     
+    # Loss function
     delta <- 1
     iters <- 0
     pb <- txtProgressBar(min = 0, max = max.iters, style = 3)
@@ -796,9 +803,11 @@ optimizeALS.list  <- function(
       sum(sapply(
         X = 1:N,
         FUN = function(i) {
-          return(lambda * norm(x = H[[i]] %*% V[[i]], type = "F") ^ 2)
+          return(lambda * norm(x = (H[[i]] %*% V[[i]]), type = "F") ^ 2)##??
         }
       ))
+    
+    
     tmp <- gc()
     while (delta > thresh & iters < max.iters) {
       H <- lapply(
@@ -806,7 +815,7 @@ optimizeALS.list  <- function(
         FUN = function(i) {
           return(t(x = solveNNLS(
             C = rbind(t(x = W[[i]]) + t(x = V[[i]]), sqrt_lambda * t(x = V[[i]])),
-            B = rbind(t(x = E[[i]]), matrix(data = 0, nrow = g, ncol = ns[i]))
+            B = rbind(t(x = E[[i]]), matrix(data = 0, nrow = g[i], ncol = ns[i]))
           )))
         }
       )
@@ -816,20 +825,33 @@ optimizeALS.list  <- function(
         FUN = function(i) {
           return(solveNNLS(
             C = rbind(H[[i]], sqrt_lambda * H[[i]]),
-            B = rbind(E[[i]] - H[[i]] %*% W[[i]], matrix(data = 0, nrow = ns[[i]], ncol = g))
+            B = rbind(E[[i]] - H[[i]] %*% W[[i]], matrix(data = 0, nrow = ns[[i]], ncol = g[i]))
           ))
         }
       )
       tmp <- gc()
-      W <- solveNNLS(
-        C = rbindlist(mat_list = H),
+      
+      
+      W_comm <- solveNNLS(
+        C = rbindlist(mat_list = H), 
         B = rbindlist(mat_list = lapply(
           X = 1:N,
           FUN = function(i) {
-            return(E[[i]] - H[[i]] %*% V[[i]])
+            return((E[[i]] - H[[i]] %*% V[[i]])[,1:gm])
           }
         ))
       )
+      
+      W <- lapply(
+        X = 1:N,
+        FUN = function(i) {
+          return(
+            cbind(W_comm, matrix(data = 0, nrow = k, ncol = g[i] - gm)))
+        }
+      )
+      
+      
+      # Calculate loss
       tmp <- gc()
       obj <- sum(sapply(
         X = 1:N,
@@ -840,7 +862,7 @@ optimizeALS.list  <- function(
         sum(sapply(
           X = 1:N,
           FUN = function(i) {
-            return(lambda * norm(x = H[[i]] %*% V[[i]], type = "F") ^ 2)
+            return(lambda * norm(x = (H[[i]] %*% V[[i]]), type = "F") ^ 2)##[,1:gm]??
           }
         ))
       tmp <- gc()
@@ -855,7 +877,7 @@ optimizeALS.list  <- function(
             Re-running with a higher max.iters is recommended.")
     }
     if (obj < best_obj) {
-      W_m <- W
+      W_m <- W_comm
       H_m <- H
       V_m <- V
       best_obj <- obj
@@ -932,7 +954,7 @@ optimizeALS.liger <- function(
   for (i in 1:length(x = object@scale.data)) {
     rownames(x = out$H[[i]]) <- rownames(x = object@scale.data[[i]])
   }
-  colnames(x = out$W) <- object@var.genes
+  colnames(x = out$W) <- colnames(x = object@scale.data[[1]])#??
   for (i in names(x = out)) {
     slot(object = object, name = i) <- out[[i]]
   }
