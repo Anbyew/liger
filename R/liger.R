@@ -720,6 +720,12 @@ optimizeALS.list  <- function(
       return(matrix(data = 0, nrow = k, ncol = g[i]))
     }
   )
+  U_m <- lapply(
+    X = 1:N,
+    FUN = function(i) {
+      return(matrix(data = 0, nrow = k, ncol = g[i] - gm))
+    }
+  )
   H_m <- lapply(
     X = ns,
     FUN = function(n) {
@@ -758,9 +764,20 @@ optimizeALS.list  <- function(
       X = 1:N,
       FUN = function(i) {
         return(matrix(
-          data = abs(x = runif(n = g[i] * k, min = 0, max = 2)),
+          data = abs(x = runif(n = gm * k, min = 0, max = 2)),
           nrow = k,
-          ncol = g[i]
+          ncol = gm
+        ))
+      }
+    )
+    
+    U <- lapply(
+      X = 1:N,
+      FUN = function(i) {
+        return(matrix(
+          data = abs(x = runif(n = (g[i]-gm) * k, min = 0, max = 2)),
+          nrow = k,
+          ncol = g[i]-gm
         ))
       }
     )
@@ -797,13 +814,13 @@ optimizeALS.list  <- function(
     obj0 <- sum(sapply(
       X = 1:N,
       FUN = function(i) {
-        return(norm(x = E[[i]] - H[[i]] %*% (W[[i]] + V[[i]]), type = "F") ^ 2)
+        return(norm(x = E[[i]] - H[[i]] %*% (W[[i]] + cbind(V[[i]], U[[i]])), type = "F") ^ 2)
       }
     )) +
       sum(sapply(
         X = 1:N,
         FUN = function(i) {
-          return(lambda * norm(x = (H[[i]] %*% V[[i]]), type = "F") ^ 2)##??
+          return(lambda * norm(x = (H[[i]] %*% V[[i]]), type = "F") ^ 2)
         }
       ))
     
@@ -814,7 +831,7 @@ optimizeALS.list  <- function(
         X = 1:N,
         FUN = function(i) {
           return(t(x = solveNNLS(
-            C = rbind(t(x = W[[i]]) + t(x = V[[i]]), sqrt_lambda * t(x = V[[i]])),
+            C = rbind(t(x = W[[i]]) + t(x = cbind(V[[i]], U[[i]])), sqrt_lambda * t(x = cbind(V[[i]], U[[i]]))),
             B = rbind(t(x = E[[i]]), matrix(data = 0, nrow = g[i], ncol = ns[i]))
           )))
         }
@@ -829,15 +846,29 @@ optimizeALS.list  <- function(
           ))
         }
       )
-      tmp <- gc()
       
+      tmp <- gc()
+
+      
+      U <- lapply(
+        X = 2:N, #temperal fix! assuming i=1 has the lowest dim
+        FUN = function(i) {
+          return(solveNNLS(
+            C = H[[i]],
+            B = E[[i]][, (gm+1):g[i]]
+          ))
+        }
+      )
+
+      tmp <- gc()
+
       
       W_comm <- solveNNLS(
         C = rbindlist(mat_list = H), 
         B = rbindlist(mat_list = lapply(
           X = 1:N,
           FUN = function(i) {
-            return((E[[i]] - H[[i]] %*% V[[i]])[,1:gm])
+            return((E[[i]] - H[[i]] %*% cbind(V[[i]], U[[i]]))[,1:gm])
           }
         ))
       )
@@ -856,13 +887,13 @@ optimizeALS.list  <- function(
       obj <- sum(sapply(
         X = 1:N,
         FUN = function(i) {
-          return(norm(x = E[[i]] - H[[i]] %*% (W[[i]] + V[[i]]), type = "F") ^ 2)
+          return(norm(x = E[[i]] - H[[i]] %*% (W[[i]] + cbind(V[[i]], U[[i]])), type = "F") ^ 2)
         }
       )) +
         sum(sapply(
           X = 1:N,
           FUN = function(i) {
-            return(lambda * norm(x = (H[[i]] %*% V[[i]]), type = "F") ^ 2)##[,1:gm]??
+            return(lambda * norm(x = (H[[i]] %*% V[[i]]), type = "F") ^ 2)
           }
         ))
       tmp <- gc()
@@ -879,7 +910,14 @@ optimizeALS.list  <- function(
     if (obj < best_obj) {
       W_m <- W_comm
       H_m <- H
-      V_m <- V
+      
+      V_m <- lapply(
+        X = 1:N,
+        FUN = function(i) {
+          return(cbind(V[[i]], U[[i]]))
+        }
+      )
+      
       best_obj <- obj
       best_seed <- rand.seed + i - 1
     }
