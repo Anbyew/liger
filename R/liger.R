@@ -700,6 +700,7 @@ optimizeALS.list  <- function(
   #test
   print("hello wttt?")
   
+  # Initialization to be zeros
   E <- object
   N <- length(x = E)
   ns <- sapply(X = E, FUN = nrow)
@@ -725,41 +726,39 @@ optimizeALS.list  <- function(
       return(matrix(data = 0, nrow = n, ncol = k))
     }
   )
+  
   tmp <- gc()
   best_obj <- Inf
   run_stats <- matrix(data = 0, nrow = nrep, ncol = 2)
+  
+  
   for (i in 1:nrep) {
     set.seed(seed = rand.seed + i - 1)
     start_time <- Sys.time()
-#    W <- matrix(
-#      data = abs(x = runif(n = gm * k, min = 0, max = 2)),
-#      nrow = k,
-#      ncol = gm
-#    )
     
+    # Initialization with uniform random numbers
     W <- lapply(
       X = 1:N,
       FUN = function(i) {
-        return(matrix(
-          data = cbind(abs(x = runif(n = g * k, min = 0, max = 2)), 
-                       matrix(data = 0, nrow = k, ncol = g[i]-gm)),
+        return(
+          cbind(matrix(
+          data = abs(x = runif(n = k * gm, min = 0, max = 2)),
           nrow = k,
-          ncol = g
-        ))
+          ncol = gm), matrix(data = 0, nrow = k, ncol = g[i] - gm)))
       }
     )
-    
-    
+
     V <- lapply(
       X = 1:N,
       FUN = function(i) {
         return(matrix(
-          data = abs(x = runif(n = g * k, min = 0, max = 2)),
+          data = abs(x = runif(n = g[i] * k, min = 0, max = 2)),
           nrow = k,
-          ncol = g
+          ncol = g[i]
         ))
       }
     )
+    
     H <- lapply(
       X = ns,
       FUN = function(n) {
@@ -770,16 +769,20 @@ optimizeALS.list  <- function(
         ))
       }
     )
+    
+    
     tmp <- gc()
     if (!is.null(x = W.init)) {
       W <- W.init
     }
     if (!is.null(x = V.init)) {
       V <- V.init
-    }
+    } 
     if (!is.null(x = H.init)) {
       H <- H.init
     }
+    
+    
     delta <- 1
     iters <- 0
     pb <- txtProgressBar(min = 0, max = max.iters, style = 3)
